@@ -19,7 +19,7 @@ on:
 jobs:
   run-stream:
     runs-on: ubuntu-latest
-    timeout-minutes: 245  # 4 மணி 5 நிமிடங்களுக்கு பின் வேலை நிறுத்தப்படும்
+    timeout-minutes: 245  # 4 மணி 5 நிமிடங்களுக்கு பின் வேலை பாதுகாப்புடன் நிறுத்தப்படும்
 
     steps:
     - name: Checkout Repository
@@ -43,22 +43,21 @@ jobs:
           curl -L "$USER_LOGO" -o logo.png || curl -L "$DEFAULT_LOGO" -o logo.png
         fi
 
-    - name: Start Live Streaming to Facebook with Auto-Reconnect
+    - name: Start Live Streaming to Facebook (Optimized & Stable)
       run: |
-        # ஸ்ட்ரீம் கட்டளை திடீரென நின்றால் தானாகவே மறுபடியும் இணைக்கும் லூப் அமைப்பு (Auto-Reconnect Loop)
-        # -t 14400 -> மொத்தம் 4 மணி நேரம் வரை இயங்கும்
-        
+        # 4 மணி நேரம் (14400 வினாடிகள்) தொடர்ச்சியாக இயங்கும் வகையில் அமைப்பு
         end_time=$(($(date +%s) + 14400))
         
         while [ $(date +%s) -lt $end_time ]; do
-          echo "நேரலை ஒளிபரப்பு தொடங்குகிறது..."
+          echo "முகநூல் நேரலை ஒளிபரப்பு தொடங்குகிறது..."
           
           ffmpeg -re \
             -i "${{ github.event.inputs.video_url }}" \
             -i logo.png \
             -filter_complex "[1:v]scale=80:-1[scaled_logo];[0:v][scaled_logo]overlay=W-w-20:10" \
-            -c:v libx264 -preset veryfast -b:v 1800k -maxrate 1800k -bufsize 3600k \
+            -c:v libx264 -preset veryfast -b:v 2000k -maxrate 2000k -bufsize 4000k \
             -pix_fmt yuv420p -g 50 -r 30 \
+            -s 1280x720 \
             -c:a aac -b:a 128k -ar 44100 \
             -f flv \
             "rtmps://live-api-s.facebook.com:443/rtmp/${{ github.event.inputs.stream_key }}" || true
