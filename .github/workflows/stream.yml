@@ -19,7 +19,7 @@ on:
 jobs:
   run-stream:
     runs-on: ubuntu-latest
-    timeout-minutes: 245  # பாதுகாப்புக்காக 4 மணி 5 நிமிடங்களுக்கு பின் வேலை நிறுத்தப்படும்
+    timeout-minutes: 245  # 4 மணி 5 நிமிடங்களுக்கு பின் வேலை நிறுத்தப்படும்
 
     steps:
     - name: Checkout Repository
@@ -32,31 +32,37 @@ jobs:
 
     - name: Setup Logo Image
       run: |
-        # நீங்கள் புதிய லோகோ URL கொடுத்திருந்தால் அதை டவுன்லோட் செய்யும்; இல்லையெனில் இயல்புநிலை லோகோவை பயன்படுத்தும்
         USER_LOGO="${{ github.event.inputs.logo_url }}"
         DEFAULT_LOGO="https://play-lh.googleusercontent.com/5DiOy01r-5O5xeTMaQZwQxSkJxJOC684cm0-jc9SH64Zi9bFF_ld0-n86tGNnduSNVIEn_rNG2LgQFf8RLJY"
         
         if [ -z "$USER_LOGO" ]; then
-          echo "புதிய லோகோ URL கொடுக்கப்படவில்லை. இயல்புநிலை (Default) லோகோ பயன்படுத்தப்படுகிறது."
+          echo "இயல்புநிலை (Default) லோகோ பயன்படுத்தப்படுகிறது."
           curl -L "$DEFAULT_LOGO" -o logo.png
         else
-          echo "நீங்கள் வழங்கிய புதிய லோகோ URL பயன்படுத்தப்படுகிறது."
+          echo "புதிய லோகோ URL பயன்படுத்தப்படுகிறது."
           curl -L "$USER_LOGO" -o logo.png || curl -L "$DEFAULT_LOGO" -o logo.png
         fi
 
-    - name: Start Live Streaming to Facebook
+    - name: Start Live Streaming to Facebook with Auto-Reconnect
       run: |
-        # -t 14400 -> துல்லியமாக 4 மணி நேரம் ஓடிவிட்டு தானாக நிற்கும்
-        # scale=80:-1 -> லோகோ சிறியதாக மாற்றப்பட்டுள்ளது
-        # overlay=W-w-20:10 -> மேல் வலது மூலையில், மேலிருந்து 10px உயரமாக பொருத்தப்பட்டுள்ளது
+        # ஸ்ட்ரீம் கட்டளை திடீரென நின்றால் தானாகவே மறுபடியும் இணைக்கும் லூப் அமைப்பு (Auto-Reconnect Loop)
+        # -t 14400 -> மொத்தம் 4 மணி நேரம் வரை இயங்கும்
         
-        ffmpeg -re \
-          -i "${{ github.event.inputs.video_url }}" \
-          -i logo.png \
-          -filter_complex "[1:v]scale=80:-1[scaled_logo];[0:v][scaled_logo]overlay=W-w-20:10" \
-          -t 14400 \
-          -c:v libx264 -preset veryfast -b:v 2500k -maxrate 2500k -bufsize 5000k \
-          -pix_fmt yuv420p -g 50 \
-          -c:a aac -b:a 128k \
-          -f flv \
-          "rtmps://live-api-s.facebook.com:443/rtmp/${{ github.event.inputs.stream_key }}"
+        end_time=$(($(date +%s) + 14400))
+        
+        while [ $(date +%s) -lt $end_time ]; do
+          echo "நேரலை ஒளிபரப்பு தொடங்குகிறது..."
+          
+          ffmpeg -re \
+            -i "${{ github.event.inputs.video_url }}" \
+            -i logo.png \
+            -filter_complex "[1:v]scale=80:-1[scaled_logo];[0:v][scaled_logo]overlay=W-w-20:10" \
+            -c:v libx264 -preset veryfast -b:v 1800k -maxrate 1800k -bufsize 3600k \
+            -pix_fmt yuv420p -g 50 -r 30 \
+            -c:a aac -b:a 128k -ar 44100 \
+            -f flv \
+            "rtmps://live-api-s.facebook.com:443/rtmp/${{ github.event.inputs.stream_key }}" || true
+            
+          echo "தற்காலிகத் தடை ஏற்பட்டது. 5 வினாடிகளுக்குப் பிறகு மீண்டும் இணைக்கப்படுகிறது..."
+          sleep 5
+        done
