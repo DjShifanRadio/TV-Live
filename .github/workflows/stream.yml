@@ -1,0 +1,62 @@
+name: Facebook Live Stream 4 Hours
+
+on:
+  workflow_dispatch:
+    inputs:
+      video_url:
+        description: 'Video or Stream URL (Direct MP4/M3U8 link)'
+        required: true
+        default: ''
+      stream_key:
+        description: 'Facebook Live Stream Key'
+        required: true
+        default: ''
+      logo_url:
+        description: 'Logo Image URL (Optional: leave blank to use default logo)'
+        required: false
+        default: ''
+
+jobs:
+  run-stream:
+    runs-on: ubuntu-latest
+    timeout-minutes: 245  # பாதுகாப்புக்காக 4 மணி 5 நிமிடங்களுக்கு பின் வேலை நிறுத்தப்படும்
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Install FFmpeg
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg
+
+    - name: Setup Logo Image
+      run: |
+        # நீங்கள் புதிய லோகோ URL கொடுத்திருந்தால் அதை டவுன்லோட் செய்யும்; இல்லையெனில் இயல்புநிலை லோகோவை பயன்படுத்தும்
+        USER_LOGO="${{ github.event.inputs.logo_url }}"
+        DEFAULT_LOGO="https://play-lh.googleusercontent.com/5DiOy01r-5O5xeTMaQZwQxSkJxJOC684cm0-jc9SH64Zi9bFF_ld0-n86tGNnduSNVIEn_rNG2LgQFf8RLJY"
+        
+        if [ -z "$USER_LOGO" ]; then
+          echo "புதிய லோகோ URL கொடுக்கப்படவில்லை. இயல்புநிலை (Default) லோகோ பயன்படுத்தப்படுகிறது."
+          curl -L "$DEFAULT_LOGO" -o logo.png
+        else
+          echo "நீங்கள் வழங்கிய புதிய லோகோ URL பயன்படுத்தப்படுகிறது."
+          curl -L "$USER_LOGO" -o logo.png || curl -L "$DEFAULT_LOGO" -o logo.png
+        fi
+
+    - name: Start Live Streaming to Facebook
+      run: |
+        # -t 14400 -> துல்லியமாக 4 மணி நேரம் ஓடிவிட்டு தானாக நிற்கும்
+        # scale=80:-1 -> லோகோ சிறியதாக மாற்றப்பட்டுள்ளது
+        # overlay=W-w-20:10 -> மேல் வலது மூலையில், மேலிருந்து 10px உயரமாக பொருத்தப்பட்டுள்ளது
+        
+        ffmpeg -re \
+          -i "${{ github.event.inputs.video_url }}" \
+          -i logo.png \
+          -filter_complex "[1:v]scale=80:-1[scaled_logo];[0:v][scaled_logo]overlay=W-w-20:10" \
+          -t 14400 \
+          -c:v libx264 -preset veryfast -b:v 2500k -maxrate 2500k -bufsize 5000k \
+          -pix_fmt yuv420p -g 50 \
+          -c:a aac -b:a 128k \
+          -f flv \
+          "rtmps://live-api-s.facebook.com:443/rtmp/${{ github.event.inputs.stream_key }}"
