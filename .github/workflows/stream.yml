@@ -25,11 +25,11 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v3
 
-    - name: Install FFmpeg, Python & yt-dlp
+    - name: Install FFmpeg, Python & Latest yt-dlp
       run: |
         sudo apt-get update
         sudo apt-get install -y ffmpeg curl python3-pip
-        sudo pip3 install --upgrade yt-dlp
+        sudo pip3 install --upgrade --force-reinstall "yt-dlp[default]"
 
     - name: Setup Logo & Background Assets
       env:
@@ -63,8 +63,8 @@ jobs:
           
           # உள்ளீடு YouTube லிங்கா அல்லது நேரடி M3U8 / TV Stream லிங்கா என கண்டறிந்து நேரலை லிங்கைப் பெறுதல்
           if [[ "$MEDIA_INPUT" == *"youtube.com"* ]] || [[ "$MEDIA_INPUT" == *"youtu.be"* ]]; then
-            echo "📺 YouTube ஆதாரம் கண்டறியப்பட்டது. yt-dlp மூலம் நேரலை லிங்க் பெறப்படுகிறது..."
-            STREAM_SRC=$(yt-dlp --extractor-args "youtube:player_client=android,web" -g -f "best[height<=720]/best" "$MEDIA_INPUT" 2>/dev/null | head -n 1)
+            echo "📺 YouTube ஆதாரம் கண்டறியப்பட்டது. ஆண்ட்ராய்டு மற்றும் டிவி கிளைண்ட்கள் மூலம் லிங்க் பெறப்படுகிறது..."
+            STREAM_SRC=$(yt-dlp --extractor-args "youtube:player_client=android,tv,web" -g -f "best[height<=720]/best" "$MEDIA_INPUT" 2>/dev/null | head -n 1)
           else
             echo "🌐 நேரடி M3U8 அல்லது வெளிப்புற ஸ்ட்ரீம் லிங்க் கண்டறியப்பட்டது..."
             STREAM_SRC="$MEDIA_INPUT"
