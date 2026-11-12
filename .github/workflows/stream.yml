@@ -19,17 +19,18 @@ on:
 jobs:
   stream:
     runs-on: ubuntu-latest
-    timeout-minutes: 350  # நீண்ட நேரம் தடையின்றி ஓடக்கூடிய அமைப்பு
+    timeout-minutes: 350
 
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v3
 
-    - name: Install FFmpeg, Python & Latest yt-dlp
+    - name: Install FFmpeg, Python & yt-dlp Safely
       run: |
         sudo apt-get update
         sudo apt-get install -y ffmpeg curl python3-pip
-        sudo pip3 install --upgrade --force-reinstall "yt-dlp[default]"
+        # கணினி பேக்கேஜ்களை பாதிக்காமல் yt-dlp மற்றும் அதன் தேவைகளை பாதுகாப்பாக இன்ஸ்டால் செய்தல்
+        sudo python3 -m pip install --no-cache-dir --upgrade yt-dlp --break-system-packages
 
     - name: Setup Logo & Background Assets
       env:
@@ -55,15 +56,14 @@ jobs:
           exit 1
         fi
 
-        echo "🚀 உலகளாவிய ஸ்ட்ரீமிங் சுழற்சி (Universal Streaming Loop) தொடங்குகிறது..."
+        echo "🚀 உலகளாவிய ஸ்ட்ரீமிங் சுழற்சி தொடங்குகிறது..."
 
         while true; do
           echo "--------------------------------------------------"
-          echo "🔄 ஸ்ட்ரீம் ஆதாரம் (Source) சரிபார்க்கப்படுகிறது..."
+          echo "🔄 ஸ்ட்ரீம் ஆதாரம் சரிபார்க்கப்படுகிறது..."
           
-          # உள்ளீடு YouTube லிங்கா அல்லது நேரடி M3U8 / TV Stream லிங்கா என கண்டறிந்து நேரலை லிங்கைப் பெறுதல்
           if [[ "$MEDIA_INPUT" == *"youtube.com"* ]] || [[ "$MEDIA_INPUT" == *"youtu.be"* ]]; then
-            echo "📺 YouTube ஆதாரம் கண்டறியப்பட்டது. ஆண்ட்ராய்டு மற்றும் டிவி கிளைண்ட்கள் மூலம் லிங்க் பெறப்படுகிறது..."
+            echo "📺 YouTube ஆதாரம் கண்டறியப்பட்டது. yt-dlp மூலம் லிங்க் பெறப்படுகிறது..."
             STREAM_SRC=$(yt-dlp --extractor-args "youtube:player_client=android,tv,web" -g -f "best[height<=720]/best" "$MEDIA_INPUT" 2>/dev/null | head -n 1)
           else
             echo "🌐 நேரடி M3U8 அல்லது வெளிப்புற ஸ்ட்ரீம் லிங்க் கண்டறியப்பட்டது..."
@@ -76,9 +76,8 @@ jobs:
             continue
           fi
 
-          echo "✅ ஸ்ட்ரீமிங் இணைப்பைப் பெற்றது. ஃபேஸ்புக்கிற்கு அனுப்பப்படுகிறது..."
+          echo "✅ ஸ்ட்ரீமிங் இணைப்பு வெற்றிகரமாகப் பெறப்பட்டது!"
 
-          # FFmpeg மூலம் லோகோ வாட்டர்மார்க் மற்றும் உயர்தர அமைப்புகளுடன் Facebook-க்கு ஸ்ட்ரீம் செய்தல்
           ffmpeg -hide_banner -loglevel info \
             -re -stream_loop -1 -i "$STREAM_SRC" \
             -i logo.png \
@@ -89,6 +88,6 @@ jobs:
             -c:a aac -b:a 128k -ar 44100 -async 1 -vsync cfr \
             -f flv "$STREAM_URL"
 
-          echo "⚠️ ஸ்ட்ரீம் துண்டிக்கப்பட்டது அல்லது முடிந்தது. 5 வினாடிகளில் மீண்டும் இணைக்கப்படுகிறது..."
+          echo "⚠️ ஸ்ட்ரீம் துண்டிக்கப்பட்டது. 5 வினாடிகளில் மீண்டும் இணைக்கப்படுகிறது..."
           sleep 5
         done
