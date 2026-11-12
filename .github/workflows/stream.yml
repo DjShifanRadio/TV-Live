@@ -1,67 +1,94 @@
-name: Facebook Live Stream 4 Hours
+name: 🚀 Universal Multi-Source to Facebook Live
 
 on:
   workflow_dispatch:
     inputs:
-      video_url:
-        description: 'Video or Stream URL (Direct MP4/M3U8 link)'
+      media_url:
+        description: 'YouTube Live / Video URL அல்லது M3U8 / External TV Stream Link-ஐ இங்கே ஒட்டவும்'
         required: true
         default: ''
       stream_key:
-        description: 'Facebook Live Stream Key'
+        description: 'Facebook Stream Key-ஐ இங்கே ஒட்டவும்'
         required: true
         default: ''
-      logo_url:
-        description: 'Logo Image URL (Optional: leave blank to use default logo)'
+      custom_logo_url:
+        description: 'Logo Image URL (விருப்பப்பட்டால் லோகோ படம் URL இடலாம் - காலியாக விட்டால் இயல்புநிலை பயன்படுத்தப்படும்)'
         required: false
         default: ''
 
 jobs:
-  run-stream:
+  stream:
     runs-on: ubuntu-latest
-    timeout-minutes: 245  # 4 மணி 5 நிமிடங்களுக்கு பின் வேலை பாதுகாப்புடன் நிறுத்தப்படும்
+    timeout-minutes: 350  # நீண்ட நேரம் தடையின்றி ஓடக்கூடிய அமைப்பு
 
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v3
 
-    - name: Install FFmpeg
+    - name: Install FFmpeg, Python & yt-dlp
       run: |
         sudo apt-get update
-        sudo apt-get install -y ffmpeg
+        sudo apt-get install -y ffmpeg curl python3-pip
+        sudo pip3 install --upgrade yt-dlp
 
-    - name: Setup Logo Image
+    - name: Setup Logo & Background Assets
+      env:
+        DEFAULT_LOGO: "https://res.cloudinary.com/dvo4hhx7j/image/upload/v1786469584/Listner_qafwzi.jpg.jpg"
+        INPUT_LOGO: ${{ github.event.inputs.custom_logo_url }}
       run: |
-        USER_LOGO="${{ github.event.inputs.logo_url }}"
-        DEFAULT_LOGO="https://play-lh.googleusercontent.com/5DiOy01r-5O5xeTMaQZwQxSkJxJOC684cm0-jc9SH64Zi9bFF_ld0-n86tGNnduSNVIEn_rNG2LgQFf8RLJY"
-        
-        if [ -z "$USER_LOGO" ]; then
-          echo "இயல்புநிலை (Default) லோகோ பயன்படுத்தப்படுகிறது."
-          curl -L "$DEFAULT_LOGO" -o logo.png
-        else
-          echo "புதிய லோகோ URL பயன்படுத்தப்படுகிறது."
-          curl -L "$USER_LOGO" -o logo.png || curl -L "$DEFAULT_LOGO" -o logo.png
+        LOGO_URL="${INPUT_LOGO:-$DEFAULT_LOGO}"
+        echo "📥 லோகோ / படம் பதிவிறக்கப்படுகிறது..."
+        curl -f -s -L "$LOGO_URL" -o logo.png || { echo "⚠️ லோகோ பதிவிறக்க முடியவில்லை, இயல்புநிலை பயன்படுத்தப்படுகிறது"; }
+        if [ ! -f logo.png ]; then
+          curl -f -s -L "$DEFAULT_LOGO" -o logo.png
+        fi
+        ls -lh logo.png
+
+    - name: Start Universal 24/7 Live Stream Loop
+      env:
+        MEDIA_INPUT: ${{ github.event.inputs.media_url }}
+        STREAM_KEY: ${{ github.event.inputs.stream_key }}
+        STREAM_URL: "rtmps://live-api-s.facebook.com:443/rtmp/${{ github.event.inputs.stream_key }}"
+      run: |
+        if [ -z "$MEDIA_INPUT" ] || [ -z "$STREAM_KEY" ]; then
+          echo "❌ பிழை: Media URL மற்றும் Facebook Stream Key இரண்டும் அவசியமானது!"
+          exit 1
         fi
 
-    - name: Start Live Streaming to Facebook (Optimized & Stable)
-      run: |
-        # 4 மணி நேரம் (14400 வினாடிகள்) தொடர்ச்சியாக இயங்கும் வகையில் அமைப்பு
-        end_time=$(($(date +%s) + 14400))
-        
-        while [ $(date +%s) -lt $end_time ]; do
-          echo "முகநூல் நேரலை ஒளிபரப்பு தொடங்குகிறது..."
+        echo "🚀 உலகளாவிய ஸ்ட்ரீமிங் சுழற்சி (Universal Streaming Loop) தொடங்குகிறது..."
+
+        while true; do
+          echo "--------------------------------------------------"
+          echo "🔄 ஸ்ட்ரீம் ஆதாரம் (Source) சரிபார்க்கப்படுகிறது..."
           
-          ffmpeg -re \
-            -i "${{ github.event.inputs.video_url }}" \
+          # உள்ளீடு YouTube லிங்கா அல்லது நேரடி M3U8 / TV Stream லிங்கா என கண்டறிந்து நேரலை லிங்கைப் பெறுதல்
+          if [[ "$MEDIA_INPUT" == *"youtube.com"* ]] || [[ "$MEDIA_INPUT" == *"youtu.be"* ]]; then
+            echo "📺 YouTube ஆதாரம் கண்டறியப்பட்டது. yt-dlp மூலம் நேரலை லிங்க் பெறப்படுகிறது..."
+            STREAM_SRC=$(yt-dlp --extractor-args "youtube:player_client=android,web" -g -f "best[height<=720]/best" "$MEDIA_INPUT" 2>/dev/null | head -n 1)
+          else
+            echo "🌐 நேரடி M3U8 அல்லது வெளிப்புற ஸ்ட்ரீம் லிங்க் கண்டறியப்பட்டது..."
+            STREAM_SRC="$MEDIA_INPUT"
+          fi
+
+          if [ -z "$STREAM_SRC" ]; then
+            echo "⚠️ எச்சரிக்கை: மீடியா லிங்கைப் பெற முடியவில்லை! 10 வினாடிகளுக்குப் பிறகு மீண்டும் முயற்சிக்கிறது..."
+            sleep 10
+            continue
+          fi
+
+          echo "✅ ஸ்ட்ரீமிங் இணைப்பைப் பெற்றது. ஃபேஸ்புக்கிற்கு அனுப்பப்படுகிறது..."
+
+          # FFmpeg மூலம் லோகோ வாட்டர்மார்க் மற்றும் உயர்தர அமைப்புகளுடன் Facebook-க்கு ஸ்ட்ரீம் செய்தல்
+          ffmpeg -hide_banner -loglevel info \
+            -re -stream_loop -1 -i "$STREAM_SRC" \
             -i logo.png \
-            -filter_complex "[1:v]scale=80:-1[scaled_logo];[0:v][scaled_logo]overlay=W-w-20:10" \
+            -filter_complex "[0:v]scale=1280:720,setsar=1,fps=30[v0];[1:v]scale=100:-1[logo];[v0][logo]overlay=W-w-25:25[outv]" \
+            -map "[outv]" -map 0:a:0 \
             -c:v libx264 -preset veryfast -b:v 2000k -maxrate 2000k -bufsize 4000k \
-            -pix_fmt yuv420p -g 50 -r 30 \
-            -s 1280x720 \
-            -c:a aac -b:a 128k -ar 44100 \
-            -f flv \
-            "rtmps://live-api-s.facebook.com:443/rtmp/${{ github.event.inputs.stream_key }}" || true
-            
-          echo "தற்காலிகத் தடை ஏற்பட்டது. 5 வினாடிகளுக்குப் பிறகு மீண்டும் இணைக்கப்படுகிறது..."
+            -pix_fmt yuv420p -g 60 -r 30 \
+            -c:a aac -b:a 128k -ar 44100 -async 1 -vsync cfr \
+            -f flv "$STREAM_URL"
+
+          echo "⚠️ ஸ்ட்ரீம் துண்டிக்கப்பட்டது அல்லது முடிந்தது. 5 வினாடிகளில் மீண்டும் இணைக்கப்படுகிறது..."
           sleep 5
         done
